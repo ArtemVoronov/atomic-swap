@@ -6,6 +6,7 @@ const apiKey = process.env.BCOIN_API_KEY;
 const network = bcoin.Network.get('testnet');
 const Mnemonic = bcoin.hd.Mnemonic;
 const HD = bcoin.hd;
+const utils = require("./utils.js")
 
 const clientOptions = {
   network: network.type,
@@ -26,90 +27,6 @@ function ensureBuffer(string) {
     return string;
   else
     return Buffer.from(string, 'hex');
-}
-
-function createSecret(secret) {
-  if (!secret)
-    secret = bcrypto.random.randomBytes(32);
-  else
-    secret = ensureBuffer(secret);
-
-  const hash = bcrypto.SHA256.digest(secret);
-
-  return {
-    'secret': secret,
-    'hash': hash
-  };
-}
-
-function encodeCSV(locktime, seconds) {
-  let locktimeUint32 = locktime >>> 0;
-  if(locktimeUint32 !== locktime)
-    throw new Error('Locktime must be a uint32.');
-
-  if (seconds) {
-    locktimeUint32 >>>= bcoin.consensus.SEQUENCE_GRANULARITY;
-    locktimeUint32 &= bcoin.consensus.SEQUENCE_MASK;
-    locktimeUint32 |= bcoin.consensus.SEQUENCE_TYPE_FLAG;
-  } else {
-    locktimeUint32 &= bcoin.consensus.SEQUENCE_MASK;
-  }
-
-  return locktimeUint32;
-}
-
-// REDEEM script: the output of the swap HTLC
-function createRedeemScript(hash, refundPubkey, swapPubkey, locktime) {
-  const redeem = new bcoin.Script();
-  locktime = encodeCSV(locktime, true);
-
-  hash = ensureBuffer(hash);
-  refundPubkey = ensureBuffer(refundPubkey);
-  swapPubkey = ensureBuffer(swapPubkey);
-
-  redeem.pushSym('OP_IF');
-  redeem.pushSym('OP_SHA256');
-  redeem.pushData(hash);
-  redeem.pushSym('OP_EQUALVERIFY');
-  redeem.pushData(swapPubkey);
-  redeem.pushSym('OP_CHECKSIG');
-  redeem.pushSym('OP_ELSE');
-  redeem.pushInt(locktime);
-  redeem.pushSym('OP_CHECKSEQUENCEVERIFY');
-  redeem.pushSym('OP_DROP');
-  redeem.pushData(refundPubkey);
-  redeem.pushSym('OP_CHECKSIG');
-  redeem.pushSym('OP_ENDIF');
-  redeem.compile();
-
-  return redeem;
-}
-
-// REFUND script: used by original sender of funds to open time lock
-function createRefundInputScript(redeemScript) {
-  const inputRefund = new bcoin.Script();
-
-  inputRefund.pushInt(0); // signature placeholder
-  inputRefund.pushInt(0);
-  inputRefund.pushData(redeemScript.toRaw());
-  inputRefund.compile();
-
-  return inputRefund;
-}
-
-// SWAP script: used by counterparty to open the hash lock
-function createSwapInputScript(redeemScript, secret) {
-  const inputSwap = new bcoin.Script();
-
-  secret = ensureBuffer(secret);
-
-  inputSwap.pushInt(0); // signature placeholder
-  inputSwap.pushData(secret);
-  inputSwap.pushInt(1);
-  inputSwap.pushData(redeemScript.toRaw());
-  inputSwap.compile();
-
-  return inputSwap;
 }
 
 function getAddressFromRedeemScript(redeemScript) {
@@ -308,7 +225,7 @@ function extractSecret(tx, address) {
   const hour = 60 * 60;
   const CSV_LOCKTIME = 0.05 * hour; // can't spend redeem until this time passes
   const TX_nSEQUENCE = 0.1 * hour; // minimum passed time before redeem tx valid
-  const secret = createSecret();
+  const secret = utils.createSecret();
   // console.log("secret:     ", secret.secret);
   // console.log("secret hash:", secret.hash);
 
@@ -327,10 +244,10 @@ function extractSecret(tx, address) {
   // result = await wallet.getKey("n14iNH6FRiFtBwy2q76EnYsHH4ww4c8aNV");
   // console.log(result);
 
-  const redeemScript = createRedeemScript(secret.hash, sellerKeyPair.publicKey, buyerKeyPair.publicKey, CSV_LOCKTIME);
+  const redeemScript = utils.createRedeemScript(secret.hash, sellerKeyPair.publicKey, buyerKeyPair.publicKey, CSV_LOCKTIME);
   // console.log("redeem script:", redeemScript);
 
-  const refundScript = createRefundInputScript(redeemScript);
+  const refundScript = utils.createRefundInputScript(redeemScript);
   // console.log("refund script:", refundScript);
 
   // wrap redeem script in P2SH address
@@ -366,7 +283,7 @@ function extractSecret(tx, address) {
 
   // console.log('\nREFUND VERIFY:\n', verifyMTX(refundTX));
 
-  const swapScript = createSwapInputScript(redeemScript, secret.secret);
+  const swapScript = utils.createSwapInputScript(redeemScript, secret.secret);
   const swapTX = createRedeemTX(
       buyerKeyPair.address,
       10000,
