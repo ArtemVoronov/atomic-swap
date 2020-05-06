@@ -174,6 +174,118 @@ async function sendTransaction(value, toAddress, accountName = 'default', rate =
   return result;
 }
 
+/**
+ * Generate complete transaction to spend HTLC
+ * Works for both swap and refund
+ */
+
+function createRedeemTX(address, fee, fundingTX, fundingTXoutput, redeemScript, inputScript, locktime, privateKey) {
+  // Init and check input
+  const redeemTX = new bcoin.MTX();
+  privateKey = ensureBuffer(privateKey);
+
+  // Add coin (input UTXO to spend) from HTLC transaction output
+  const coin = bcoin.Coin.fromTX(fundingTX, fundingTXoutput, -1);
+  redeemTX.addCoin(coin);
+
+  // Add output to mtx and subtract fee
+  if (coin.value - fee < 0) {
+    throw new Error('Fee is greater than output value');
+  }
+
+  redeemTX.addOutput({
+    address: address,
+    value: coin.value - fee
+  });
+
+  // Insert input script (swap or refund) to satisfy HTLC condition
+  redeemTX.inputs[0].script = inputScript;
+
+  // Refunds also need to set relative lock time
+  if (locktime) {
+    redeemTX.setSequence(0, locktime, true);
+  } else {
+    redeemTX.inputs[0].sequence = 0xffffffff;
+  }
+
+  // Sign transaction and insert sig over placeholder
+  const sig = signInput(redeemTX,0, redeemScript, coin.value, privateKey, null, 0);
+  inputScript.setData(0, sig);
+
+  // Finish and return
+  inputScript.compile();
+  return redeemTX;
+}
+
+function signInput(mtx, index, redeemScript, value, privateKey, sigHashType, version_or_flags) {
+  privateKey = ensureBuffer(privateKey);
+  return mtx.signature(index, redeemScript, value, privateKey, sigHashType, version_or_flags);
+}
+
+/**
+ * (local testing only) Create a "coinbase" UTXO to spend from
+ */
+
+function getFundingTX(address, value) {
+  const cb = new bcoin.MTX();
+  cb.addInput({
+    prevout: new bcoin.Outpoint(),
+    script: new bcoin.Script(),
+    sequence: 0xffffffff
+  });
+  cb.addOutput({
+    address: address,
+    value: value
+  });
+
+  return cb;
+}
+
+/**
+ * Utility: Search transaction for address and get output index and value
+ */
+
+function extractOutput(tx, address) {
+  if (typeof address !== 'string')
+    address = address.toString();
+
+  for (let i = 0; i < tx.outputs.length; i++) {
+    const outputJSON = tx.outputs[i].getJSON();
+    const outAddr = outputJSON.address;
+    // const outAddr = tx.outputs[i].address;
+    // const outValue = tx.outputs[i].value;
+    // console.log(tx.outputs[i].path);
+    if (outAddr === address) {
+      return {
+        index: i,
+        amount: outputJSON.value
+      };
+    }
+  }
+  return false;
+}
+
+function verifyMTX(mtx) {
+  return mtx.verify(bcoin.Script.flags.STANDARD_VERIFY_FLAGS);
+}
+
+/**
+ * Utility: Search transaction for HTLC redemption and extract hashed secret
+ */
+function extractSecret(tx, address) {
+  if (typeof address !== 'string')
+    address = address.toString();
+
+  for (const input of tx.inputs) {
+    const inputJSON = input.getJSON();
+    const inAddr = inputJSON.address;
+    if (inAddr === address) {
+      return input.script.code[1].data;
+    }
+  }
+  return false;
+}
+
 (async () => {
   const walletId="primary"
   const wallet = walletClient.wallet(walletId);
@@ -186,20 +298,19 @@ async function sendTransaction(value, toAddress, accountName = 'default', rate =
 
   const recoveredMasterKey = recoverMasterFromMnemonic(walletMaster.mnemonic.phrase);
   const recoveredMasterKey1 = recoveredMasterKey.derivePath('m/44/0/0/0/0');
-  const recoveredMasterKey2 = recoveredMasterKey.derivePath('m/44/0/0/0/1');
+  const recoveredMasterKey2 = recoveredMasterKey.derivePath('m/44/0/0/0/1');//TODO: use another wallet and another account, or better check Algorand for this pair
   const sellerKeyPair = getKeyPair(recoveredMasterKey1.privateKey);
   const buyerKeyPair = getKeyPair(recoveredMasterKey2.privateKey);
-  console.log("sellerKeyPair:", sellerKeyPair);
-  console.log("buyerKeyPair:", buyerKeyPair);
+  // console.log("sellerKeyPair:", sellerKeyPair);
+  // console.log("buyerKeyPair:", buyerKeyPair);
 
-  // await printAccountInfo("default");
-  // await printAccountInfo("second");
 
   const hour = 60 * 60;
-  const CSV_LOCKTIME = 1 * hour;
+  const CSV_LOCKTIME = 0.05 * hour; // can't spend redeem until this time passes
+  const TX_nSEQUENCE = 0.1 * hour; // minimum passed time before redeem tx valid
   const secret = createSecret();
-  console.log("secret:     ", secret.secret);
-  console.log("secret hash:", secret.hash);
+  // console.log("secret:     ", secret.secret);
+  // console.log("secret hash:", secret.hash);
 
   // const account = await wallet.getAccount('default');
   // // console.log(account);
@@ -217,14 +328,71 @@ async function sendTransaction(value, toAddress, accountName = 'default', rate =
   // console.log(result);
 
   const redeemScript = createRedeemScript(secret.hash, sellerKeyPair.publicKey, buyerKeyPair.publicKey, CSV_LOCKTIME);
-  console.log("redeem script:", redeemScript);
+  // console.log("redeem script:", redeemScript);
 
   const refundScript = createRefundInputScript(redeemScript);
-  console.log("refund script:", refundScript);
+  // console.log("refund script:", refundScript);
 
+  // wrap redeem script in P2SH address
   const addressFromRedeemScript = getAddressFromRedeemScript(redeemScript);
-  console.log('Swap P2SH address:', addressFromRedeemScript.toString());
+  // console.log('Swap P2SH address:', addressFromRedeemScript.toString());
+
+  // const coinBase = await wallet.getCoins();
+  // console.log("coinBase:", coinBase);
+
+  // console.log("coins[0].hash:", coins[0].hash);
+  // const result = await wallet.getTX(coinBase[0].hash);
+  // const result = await nodeClient.getTX(coins[0].hash);
+  // const result = await nodeClient.getCoin(coins[0].hash, 0);
+  // console.log("fundingTX:", result);
+  const fundingTX = getFundingTX(addressFromRedeemScript, 10000);
+  console.log("fundingTX:", fundingTX);
+
+  // make sure we can determine which UTXO funds the HTLC
+  const fundingTXoutput = extractOutput(fundingTX, addressFromRedeemScript);
+  console.log('Funding TX output:\n', fundingTXoutput);
+
+  const refundScriptdTX = createRedeemTX(
+      sellerKeyPair.address,
+      10000,
+      fundingTX,
+      fundingTXoutput.index,
+      redeemScript,
+      refundScript,
+      TX_nSEQUENCE,
+      sellerKeyPair.privateKey
+  );
+  // console.log('refundTX:\n', refundTX);
+
+  // console.log('\nREFUND VERIFY:\n', verifyMTX(refundTX));
+
+  const swapScript = createSwapInputScript(redeemScript, secret.secret);
+  const swapTX = createRedeemTX(
+      buyerKeyPair.address,
+      10000,
+      fundingTX,
+      fundingTXoutput.index,
+      redeemScript,
+      swapScript,
+      null,
+      buyerKeyPair.privateKey
+  );
+  // console.log('swapTX:\n', swapTX);
+  // console.log('\nSWAP VERIFY:\n', verifyMTX(swapTX));
+
+  // test that we can extract the HTLC secret from the SWAP redemption
+  const extractedSecret = extractSecret(swapTX, addressFromRedeemScript);
+  console.log('\nExtracted HTLC secret:\n', extractedSecret);
+  // make sure we ended up with the same secret we started with
+  console.log('Secret match:\n', extractedSecret === secret.secret);
+
+  // const result = await wallet.getPending();
+  // console.log(result);
+  //
+  // const result = await wallet.getHistory("default");
+  // console.log(result);
 
 
-
+  // await printAccountInfo("default");
+  // await printAccountInfo("second");
 })();
