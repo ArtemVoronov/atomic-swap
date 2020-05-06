@@ -119,30 +119,6 @@ function getAddressFromRedeemScript(redeemScript) {
   return bcoin.Address.fromScripthash(redeemScript.hash160());
 }
 
-async function printAccountInfo(accountName) {
-  const walletId="primary"
-  const wallet = walletClient.wallet(walletId);
-
-  const account = await wallet.getAccount(accountName);
-  // console.log(account);
-  console.log("------- " + accountName + " -------" +
-      "\nreceive address:", account.receiveAddress,
-      "\nchange address:", account.changeAddress,
-      "\nbalance:", account.balance,
-  );
-}
-
-async function sendTransaction(value, toAddress, accountName = 'default', rate = 1000) {
-  const options = {
-    rate: rate,
-    account: accountName,
-    outputs: [{ value: value, address: toAddress }]
-  };
-  const result = await wallet.send(options);
-  console.log(result);
-  return result;
-}
-
 /**
  * Generate complete transaction to spend HTLC
  * Works for both swap and refund
@@ -154,7 +130,7 @@ function createRedeemTX(address, fee, fundingTX, fundingTXoutput, redeemScript, 
   privateKey = ensureBuffer(privateKey);
 
   // Add coin (input UTXO to spend) from HTLC transaction output
-  const coin = bcoin.Coin.fromTX(fundingTX, fundingTXoutput, -1);
+  const coin = bcoin.Coin.fromTX(fundingTX, 0, -1);
   redeemTX.addCoin(coin);
 
   // Add output to mtx and subtract fee
@@ -269,6 +245,4 @@ module.exports = {
   getFundingTX: getFundingTX,
   signInput: signInput,
   createRedeemTX: createRedeemTX,
-  sendTransaction: sendTransaction,
-  printAccountInfo: printAccountInfo
 }
