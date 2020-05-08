@@ -1,6 +1,7 @@
 'use strict';
 
 const algosdk = require('algosdk');
+const fs = require('fs');
 
 function generateAlgorandKeyPair() {
   var account = algosdk.generateAccount();
@@ -24,7 +25,17 @@ async function waitForConfirmation(algodclient, txId) {
   }
 }
 
+function createDataDirIfNeeds() {
+  if (!fs.existsSync('./data')) {
+    fs.mkdirSync('./data');
+  }
+  if (!fs.existsSync('./data/algo')) {
+    fs.mkdirSync('./data/algo');
+  }
+}
+
 module.exports = {
   generateAlgorandKeyPair: generateAlgorandKeyPair,
   waitForConfirmation: waitForConfirmation,
+  createDataDirIfNeeds: createDataDirIfNeeds,
 }
