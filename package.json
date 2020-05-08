@@ -12,6 +12,7 @@
     "assert": "^2.0.0",
     "bclient": "^0.1.7",
     "bcoin": "git+https://github.com/bcoin-org/bcoin.git#semver:~2.0.0",
-    "bcrypto": "^2.0.0"
+    "bcrypto": "^2.0.0",
+    "algosdk": "^1.5.0"
   }
 }
