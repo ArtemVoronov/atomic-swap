@@ -6,23 +6,23 @@ const server = '127.0.0.1';
 const port = '8080';
 const token = process.env.ALGO_API_TOKEN;
 
+let algodclient = new algosdk.Algod(token, server, port);
 async function connectToNetwork() {
 
-  let algodClient = new algosdk.Algod(token, server, port);
-  let status = await algodClient.status();
+  let status = await algodclient.status();
   console.log("Algorand network status: %o", status);
-  let version = await algodClient.versions();
+  let version = await algodclient.versions();
   // console.log("Algorand protocol version: %o", version);
 
 
   const passphrase = "injury say input naive hole festival tomato rotate festival monster number park filter kind sting away dose toilet sign trap source claim harbor absent track";
   let myAccount = algosdk.mnemonicToSecretKey(passphrase);
-  // console.log("My address: %s", myAccount.addr);
-  let accountInfo = await algodClient.accountInformation(myAccount.addr);
-  // console.log("Account balance: %d microAlgos", accountInfo.amount);
+  console.log("My address: %s", myAccount.addr);
+  let accountInfo = await algodclient.accountInformation(myAccount.addr);
+  console.log("Account balance: %d microAlgos", accountInfo.amount);
 
 
-  let params = await algodClient.getTransactionParams();
+  let params = await algodclient.getTransactionParams();
   // console.log("Alorand testnet tx params: %o", params);
   let note = algosdk.encodeObj("Hello World");
   let receiver = "GD64YIY3TWGDMCNPP553DZPPR6LDUSFQOIJVFDPPXWEG3FVOJCCDBBHU5A"; //faucet contract
@@ -43,12 +43,12 @@ async function connectToNetwork() {
   let txId = signedTxn.txID;
   console.log("Signed transaction with txId: %s", txId);
 
-  //todo: uncomment after sync with testnet will be finished
-
+  // uncomment for repeating
   // await algodClient.sendRawTransaction(signedTxn.blob);
-  //
   // await waitForConfirmation(algodClient, txId);
-  //
+
+  //Transaction UAWBWKWSVIKOU3FCZU7OCLG3F6F5KZCRSUBUR4GR3TXCDFSWTB2A confirmed in round 6610049
+
   // try {
   //   let confirmedTxn = await algodClient.transactionInformation(myAccount.addr, txId);
   //   console.log("Transaction information: %o", confirmedTxn);
@@ -59,19 +59,19 @@ async function connectToNetwork() {
 }
 
 async function createContractExample() {
-  let algodClient = new algosdk.Algod(token, server, port);
 
-  //cat simple.teal.tok | base64 -> "ASABACI="
   // get suggested parameters
   let params = await algodclient.getTransactionParams();
   let endRound = params.lastRound + parseInt(1000);
   let fee = await algodclient.suggestedFee();
 
   // create logic sig
-  // b64 example "ASABACI="
-  let program = new Uint8Array(Buffer.from("ASABACI=", "base64"));
+  //cat simple.teal.tok | base64
+  //int 0 -> "ASABACI=" (reject always)
+  //int 1 -> "ASABASI=" (accept always)s
+  let program = new Uint8Array(Buffer.from("ASABASI=", "base64"));
   let lsig = algosdk.makeLogicSig(program);
-  let receiver = "GD64YIY3TWGDMCNPP553DZPPR6LDUSFQOIJVFDPPXWEG3FVOJCCDBBHU5A"; //faucet contract
+  let receiver = "GD64YIY3TWGDMCNPP553DZPPR6LDUSFQOIJVFDPPXWEG3FVOJCCDBBHU5A"; //faucet contract address
 
   // create a transaction
   let txn = {
@@ -88,11 +88,15 @@ async function createContractExample() {
   // Create the LogicSigTransaction with contract account LogicSig
   let rawSignedTxn = algosdk.signLogicSigTransaction(txn, lsig);
 
-  //todo: uncomment after sync with testnet will be finished
-
+  // console.log("rawSignedTxn: %o", rawSignedTxn)
   // send raw LogicSigTransaction to network
-  // let tx = (await algodclient.sendRawTransaction(rawSignedTxn.blob));
-  // console.log("Transaction : " + tx.txId);
+  // try {
+  //
+  //   //let tx = (await algodclient.sendRawTransaction(rawSignedTxn.blob));
+  //   console.log("Transaction : " + tx.txId);
+  // } catch (e) {
+  //   console.log(e);
+  // }
 
 }
 
@@ -118,5 +122,6 @@ async function waitForConfirmation(algodclient, txId) {
 
 (async () => {
 
-  await connectToNetwork();
+  // await connectToNetwork();
+  await createContractExample();
 })();
