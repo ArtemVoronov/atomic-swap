@@ -6,7 +6,7 @@ async function connectToNetwork() {
 
   const server = '127.0.0.1';
   const port = '8080';
-  const token = '175615008d7372c95a33fb64f2c7af4e5a4a75fa1bccf24b94fcb7183117529b';
+  const token = process.env.ALGO_API_TOKEN;
 
   let algodClient = new algosdk.Algod(token, server, port);
   let status = await algodClient.status();
