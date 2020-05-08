@@ -2,11 +2,11 @@
 
 const algosdk = require('algosdk');
 
-async function connectToNetwork() {
+const server = '127.0.0.1';
+const port = '8080';
+const token = process.env.ALGO_API_TOKEN;
 
-  const server = '127.0.0.1';
-  const port = '8080';
-  const token = process.env.ALGO_API_TOKEN;
+async function connectToNetwork() {
 
   let algodClient = new algosdk.Algod(token, server, port);
   let status = await algodClient.status();
@@ -25,12 +25,12 @@ async function connectToNetwork() {
   let params = await algodClient.getTransactionParams();
   // console.log("Alorand testnet tx params: %o", params);
   let note = algosdk.encodeObj("Hello World");
-  let receiver = "GD64YIY3TWGDMCNPP553DZPPR6LDUSFQOIJVFDPPXWEG3FVOJCCDBBHU5A";
+  let receiver = "GD64YIY3TWGDMCNPP553DZPPR6LDUSFQOIJVFDPPXWEG3FVOJCCDBBHU5A"; //faucet contract
   let txn = {
     "from": myAccount.addr,
     "to": receiver,
     "fee": params.minFee,
-    "amount": 1000000,
+    "amount": 1000000, //1 algo, here we put value in micro algo units
     "firstRound": params.lastRound,
     "lastRound": params.lastRound + 1000,
     "note": note,
@@ -56,6 +56,43 @@ async function connectToNetwork() {
   // } catch(e) {
   //   console.log(e.response.text);
   // }
+}
+
+async function createContractExample() {
+  let algodClient = new algosdk.Algod(token, server, port);
+
+  //cat simple.teal.tok | base64 -> "ASABACI="
+  // get suggested parameters
+  let params = await algodclient.getTransactionParams();
+  let endRound = params.lastRound + parseInt(1000);
+  let fee = await algodclient.suggestedFee();
+
+  // create logic sig
+  // b64 example "ASABACI="
+  let program = new Uint8Array(Buffer.from("ASABACI=", "base64"));
+  let lsig = algosdk.makeLogicSig(program);
+  let receiver = "GD64YIY3TWGDMCNPP553DZPPR6LDUSFQOIJVFDPPXWEG3FVOJCCDBBHU5A"; //faucet contract
+
+  // create a transaction
+  let txn = {
+    "from": lsig.address(),
+    "to": receiver,
+    "fee": params.fee,
+    "amount": 5,
+    "firstRound": params.lastRound,
+    "lastRound": endRound,
+    "genesisID": params.genesisID,
+    "genesisHash": params.genesishashb64
+  };
+
+  // Create the LogicSigTransaction with contract account LogicSig
+  let rawSignedTxn = algosdk.signLogicSigTransaction(txn, lsig);
+
+  //todo: uncomment after sync with testnet will be finished
+
+  // send raw LogicSigTransaction to network
+  // let tx = (await algodclient.sendRawTransaction(rawSignedTxn.blob));
+  // console.log("Transaction : " + tx.txId);
 
 }
 
