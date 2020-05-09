@@ -23,22 +23,23 @@ const receiver = {
 console.log("owner address: %s", owner.address);
 console.log("receiver address: %s", receiver.address);
 
-async function createHTLContractWithHashingSHA256(ownerAddress, receiverAddress, params) {
+async function createHTLContractWithHashingSHA256(ownerAddress, receiverAddress, timeLockInRounds = 700) {
+  let params = await algodclient.getTransactionParams();
   const hashFn = "sha256";
   let hashImg = "QzYhq9JlYbn2QdOMrhyxVlNtNjeyvyJc/I8d8VAGfGc=";
-  let expiryRound = params.lastRound + 30;//10000
+  let expiryRound = params.lastRound + timeLockInRounds;
   console.log("expiryRound: %s", expiryRound);
   let maxFee = 2000;
   return new htlcTemplate.HTLC(ownerAddress, receiverAddress, hashFn, hashImg, expiryRound, maxFee);
 }
 
 async function createTxForReceiver(contract, receiverAddress, secret, params) {
-  utils.createDataDirIfNeeds();
+  utils.createDataDirsIfNeeds();
   let endRound = params.lastRound + parseInt(1000);
   let args = [secret];
-  let lsig = algosdk.makeLogicSig(contract.getProgram(), args);
+  let lsig = algosdk.makeLogicSig(contract.programBytes, args);
   let txn = {
-    "from": contract.getAddress(),
+    "from": contract.address,
     "to": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ",
     "fee": 1,
     "type": "pay",
@@ -49,19 +50,16 @@ async function createTxForReceiver(contract, receiverAddress, secret, params) {
     "genesisHash": params.genesishashb64,
     "closeRemainderTo": receiverAddress
   };
-  let rawSignedTxn = algosdk.signLogicSigTransaction(txn, lsig);
-  let txnPath = "data/algo/receiver"+contract.getAddress()+".stxn";
-  fs.writeFileSync(txnPath, rawSignedTxn.blob);
-  return txnPath;
+  return algosdk.signLogicSigTransaction(txn, lsig);
 }
 
 function createTxForOwner(contract, ownerAddress, params) {
-  utils.createDataDirIfNeeds();
+  utils.createDataDirsIfNeeds();
   let endRound = params.lastRound + parseInt(1000);
-  let args = ["nothing"];
-  let lsig = algosdk.makeLogicSig(contract.getProgram(), args);
+  let args = [""];
+  let lsig = algosdk.makeLogicSig(contract.programBytes, args);
   let txn = {
-    "from": contract.getAddress(),
+    "from": contract.address,
     "to": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ",
     "fee": 1,
     "type": "pay",
@@ -72,90 +70,75 @@ function createTxForOwner(contract, ownerAddress, params) {
     "genesisHash": params.genesishashb64,
     "closeRemainderTo": ownerAddress
   };
-  console.log("firstRound: %s", params.lastRound);
-  console.log("endRound: %s", endRound);
-  let rawSignedTxn = algosdk.signLogicSigTransaction(txn, lsig);
-  let txnPath = "data/algo/owner"+contract.getAddress()+".stxn";
+  return algosdk.signLogicSigTransaction(txn, lsig);
+}
+
+//for debugging of transactions via 'goal clerk dryrun'
+function serializeTransaction(rawSignedTxn, filename) {
+  let txnPath = utils.ALGO_TRANSACTIONS_DIR_PATH + filename + ".stxn";
   fs.writeFileSync(txnPath, rawSignedTxn.blob);
   return txnPath;
 }
-
-async function readTxnAndSendToNetwork(txnPath) {
+//for debugging of transactions via 'goal clerk dryrun'
+function deserializeTransactionBlob(txnPath) {
   let singedTxBlob = fs.readFileSync(txnPath);
+}
 
+async function executeTxn(txnBlob) {
   try {
-    let tx = (await algodclient.sendRawTransaction(singedTxBlob));
-    console.log("Transaction: %s",tx.txId);
+    let tx = (await algodclient.sendRawTransaction(txnBlob));
+    console.log("Transaction: %s", tx.txId);
   } catch (e) {
     console.log(e);
   }
 }
 
+function serializeContract(contract) {
+  utils.createDataDirsIfNeeds();
+  let buffer = contract.getProgram();
+  let address = contract.getAddress();
+  let contractBufferPath = utils.ALGO_CONTRACTS_DIR_PATH + "buffer" + address;
+  fs.writeFileSync(contractBufferPath, buffer);
+  return contractBufferPath;
+}
+
+function deserializeContract(contractAddress) {
+  let contractBufferPath = utils.ALGO_CONTRACTS_DIR_PATH + "buffer" + contractAddress;
+  let buffer = new Buffer(fs.readFileSync(contractBufferPath));
+  return {
+    programBytes: buffer,
+    address: contractAddress,
+    getProgram: () => this.programBytes,
+    getAddress: () => this.address
+  }
+}
 
 (async() => {
 
-  // First generate contract and transactions for receiver and owner
+  // [PART 1] Generate contract and serialize it, we need to fund it before using
 
+  let contract = await createHTLContractWithHashingSHA256(owner.address, receiver.address, 100);
+  console.log("contract address: %s", contract.address);
+  serializeContract(contract);
+
+  // [PART 2] Use dispenser for funding: https://bank.testnet.algorand.network/
+  // Fund contract, comment part 1 and uncomment part 3
+
+  // [PART 3] Recover contract and initiate appropriate transaction (for owner or for receiver)
+  // let contractAddress = 'ODUVUBTLRFKYSAVJOQK2UHEKHEQDWRP3ZHMIKT3ZJNIYFGU2VJTPBOSKJ4'; //place your contract address here
+  // let recoveredContract = deserializeContract(contractAddress)
+  // console.log('recovered contract: %o', recoveredContract);
+  //
   // const secret = "hero wisdom green split loop element vote belt";
-  let params = await algodclient.getTransactionParams();
-  let contract = await createHTLContractWithHashingSHA256(owner.address, receiver.address, params);
-
-  //TODO: do not serialize trsnactions, instean try to save contract, and then use it of lsig
-  //TODO: solve problem with deserialization of contract
-  console.log('contract: %o', contract);
-  let contractPath = 'data/algo/contract'+contract.getAddress()+".json";
-  // fs.writeFileSync(contractPath, JSON.stringify(contract), 'utf-8');
-  fse.writeJsonSync(contractPath, contract);
-  // let recovered = fs.readFileSync(contractPath, 'utf-8');
-  let recovered = fse.readJsonSync(contractPath);
-  console.log('recovered: %o', recovered);
-  // console.log("contract address: %s", contract.address);
-  // let ownerTxnPath = await createTxForOwner(contract, owner.address, params);
-  // console.log("Owner transaction stored in '%s'", ownerTxnPath);
-  // let receiverTxnPath = await createTxForReceiver(contract, receiver.address, secret, params);
-  // console.log("Receiver transaction stored in '%s'", receiverTxnPath);
-
-  // Then use testnet dispenser to fund the contract address
-
-  // And then execute tx of receiver
-  // await readTxnAndSendToNetwork('data/algo/receiver<place_contract_address>.stxn');
-  // Or tx of owner for refunding algos back
-  // await readTxnAndSendToNetwork('data/algo/owner<place_contract_address>.stxn');
-
-  // owner address: LOI3BVC54WT6RS3OZFLLBI3SZ7ROBVIHFHCJYTVCIZ4VR7CZ5DTMGEOPZI
-  // receiver address: HCYPBSWCVKZBEQCRDYG7XCDFFOLQ5XPBTFIHXD2S3OUVZG6SXI3VGISRDE
-  // expiryRound: 6614793
-  // contract address: LF3BZDBOBV2HJL3DJ4JGMWTHZTPJMYFHE4JGUDU2W25YWVGP4F3ZUKUOBQ
-  // firstRound: 6614763
-  // endRound: 6615763
-  // Owner transaction stored in 'data/algo/ownerLF3BZDBOBV2HJL3DJ4JGMWTHZTPJMYFHE4JGUDU2W25YWVGP4F3ZUKUOBQ.stxn'
-  // Receiver transaction stored in 'data/algo/receiverLF3BZDBOBV2HJL3DJ4JGMWTHZTPJMYFHE4JGUDU2W25YWVGP4F3ZUKUOBQ.stxn'
-
-  // await readTxnAndSendToNetwork('data/algo/ownerLF3BZDBOBV2HJL3DJ4JGMWTHZTPJMYFHE4JGUDU2W25YWVGP4F3ZUKUOBQ.stxn');
-
-
-  //----------
-
-  // let endRound = params.lastRound + parseInt(1000);
-  // let args = ["nothing"];
-  // let lsig = algosdk.makeLogicSig(contract.getProgram(), args);
-  // let txn = {
-  //   "from": contract.getAddress(),
-  //   "to": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ",
-  //   "fee": 1,
-  //   "type": "pay",
-  //   "amount": 0,
-  //   "firstRound": params.lastRound,
-  //   "lastRound": endRound,
-  //   "genesisID": params.genesisID,
-  //   "genesisHash": params.genesishashb64,
-  //   "closeRemainderTo": owner.address
-  // };
-  // console.log("firstRound: %s", params.lastRound);
-  // console.log("endRound: %s", endRound);
-  // let rawSignedTxn = algosdk.signLogicSigTransaction(txn, lsig);
-  // let txnPath = "data/algo/owner"+contract.getAddress()+".stxn";
-
+  // let params = await algodclient.getTransactionParams();
+  //
+  // //scenario 1
+  // let receiverTx= await createTxForReceiver(recoveredContract, receiver.address, secret, params);
+  // await executeTxn(receiverTx.blob);
+  //
+  // //scenario 2
+  // let ownerTx = await createTxForOwner(recoveredContract, owner.address, params);
+  // await executeTxn(ownerTx.blob);
 
 
 })().catch(e => {

@@ -25,17 +25,30 @@ async function waitForConfirmation(algodclient, txId) {
   }
 }
 
-function createDataDirIfNeeds() {
-  if (!fs.existsSync('./data')) {
-    fs.mkdirSync('./data');
+const DATA_DIR_PATH = './data/';
+const ALGO_DATA_DIR_PATH = DATA_DIR_PATH + 'algo/';
+const ALGO_CONTRACTS_DIR_PATH = ALGO_DATA_DIR_PATH + 'contracts/';
+const ALGO_TRANSACTIONS_DIR_PATH = ALGO_DATA_DIR_PATH + 'transactions/';
+
+function createDataDirsIfNeeds() {
+  if (!fs.existsSync(DATA_DIR_PATH)) {
+    fs.mkdirSync(DATA_DIR_PATH);
   }
   if (!fs.existsSync('./data/algo')) {
     fs.mkdirSync('./data/algo');
+  }
+  if (!fs.existsSync('./data/algo/contracts')) {
+    fs.mkdirSync('./data/algo/contracts');
+  }
+  if (!fs.existsSync('./data/algo/transactions')) {
+    fs.mkdirSync('./data/algo/transactions');
   }
 }
 
 module.exports = {
   generateAlgorandKeyPair: generateAlgorandKeyPair,
   waitForConfirmation: waitForConfirmation,
-  createDataDirIfNeeds: createDataDirIfNeeds,
+  createDataDirsIfNeeds: createDataDirsIfNeeds,
+  ALGO_CONTRACTS_DIR_PATH: ALGO_CONTRACTS_DIR_PATH,
+  ALGO_TRANSACTIONS_DIR_PATH: ALGO_TRANSACTIONS_DIR_PATH
 }
