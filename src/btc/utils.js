@@ -167,47 +167,6 @@ function signInput(mtx, index, redeemScript, value, privateKey, sigHashType, ver
   return mtx.signature(index, redeemScript, value, privateKey, sigHashType, version_or_flags);
 }
 
-/**
- * (local testing only) Create a "coinbase" UTXO to spend from
- */
-function getFundingTX(address, value) {
-  const cb = new bcoin.MTX();
-  cb.addInput({
-    prevout: new bcoin.Outpoint(),
-    script: new bcoin.Script(),
-    sequence: 0xffffffff
-  });
-  cb.addOutput({
-    address: address,
-    value: value
-  });
-
-  return cb;
-}
-
-/**
- * Utility: Search transaction for address and get output index and value
- */
-
-function extractOutput(tx, address) {
-  if (typeof address !== 'string')
-    address = address.toString();
-
-  for (let i = 0; i < tx.outputs.length; i++) {
-    const outputJSON = tx.outputs[i].getJSON();
-    const outAddr = outputJSON.address;
-    // const outAddr = tx.outputs[i].address;
-    // const outValue = tx.outputs[i].value;
-    // console.log(tx.outputs[i].path);
-    if (outAddr === address) {
-      return {
-        index: i,
-        amount: outputJSON.value
-      };
-    }
-  }
-  return false;
-}
 
 function verifyMTX(mtx) {
   return mtx.verify(bcoin.Script.flags.STANDARD_VERIFY_FLAGS);
@@ -242,8 +201,6 @@ module.exports = {
   getAddressFromRedeemScript: getAddressFromRedeemScript,
   extractSecret: extractSecret,
   verifyMTX: verifyMTX,
-  extractOutput: extractOutput,
-  getFundingTX: getFundingTX,
   signInput: signInput,
   createRedeemTX: createRedeemTX,
 }
