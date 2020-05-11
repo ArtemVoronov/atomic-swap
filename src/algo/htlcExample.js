@@ -7,7 +7,6 @@ const utils = require("./utils.js")
 
 const algosdk = require('algosdk');
 const fs = require('fs');
-const fse = require('fs-extra');
 const htlcTemplate = require("algosdk/src/logicTemplates/htlc");
 
 let algodclient = new algosdk.Algod(token, server, port);
@@ -107,9 +106,7 @@ function deserializeContract(contractAddress) {
   let buffer = new Buffer(fs.readFileSync(contractBufferPath));
   return {
     programBytes: buffer,
-    address: contractAddress,
-    getProgram: () => this.programBytes,
-    getAddress: () => this.address
+    address: contractAddress
   }
 }
 

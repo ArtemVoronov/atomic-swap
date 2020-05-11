@@ -34,14 +34,14 @@ function createDataDirsIfNeeds() {
   if (!fs.existsSync(DATA_DIR_PATH)) {
     fs.mkdirSync(DATA_DIR_PATH);
   }
-  if (!fs.existsSync('./data/algo')) {
-    fs.mkdirSync('./data/algo');
+  if (!fs.existsSync(ALGO_DATA_DIR_PATH)) {
+    fs.mkdirSync(ALGO_DATA_DIR_PATH);
   }
-  if (!fs.existsSync('./data/algo/contracts')) {
-    fs.mkdirSync('./data/algo/contracts');
+  if (!fs.existsSync(ALGO_CONTRACTS_DIR_PATH)) {
+    fs.mkdirSync(ALGO_CONTRACTS_DIR_PATH);
   }
-  if (!fs.existsSync('./data/algo/transactions')) {
-    fs.mkdirSync('./data/algo/transactions');
+  if (!fs.existsSync(ALGO_TRANSACTIONS_DIR_PATH)) {
+    fs.mkdirSync(ALGO_TRANSACTIONS_DIR_PATH);
   }
 }
 

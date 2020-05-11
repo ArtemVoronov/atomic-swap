@@ -237,6 +237,7 @@ module.exports = {
   createRefundInputScript: createRefundInputScript,
   createSwapInputScript: createSwapInputScript,
   recoverMasterFromMnemonic: recoverMasterFromMnemonic,
+  createWalletFromMnemonic: createWalletFromMnemonic,
   getKeyPair: getKeyPair,
   getAddressFromRedeemScript: getAddressFromRedeemScript,
   extractSecret: extractSecret,
