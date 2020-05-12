@@ -96,14 +96,14 @@ async function checkReceiverCase(contractAddress) {
   // utils.serializeContract(contractScript, contractAddress)
 
   // [PART 2] Use dispenser for funding: https://tbtc.bitaps.com/ or send from your wallet if you have funds
-  // Fund contract, comment part 1 and uncomment part 3
-  // const contractAddress = ''; //place your contract address here
-  // let changeAddress = ""; //place your change address here
+  // Fund contract, comment part 1, part 2, and uncomment part 3
+  // const contractAddress = '2NB7jUtcpwXPvm1QyPTCWGAz11dVBAiErNS'; //place your contract address here
+  // let changeAddress = "n3jBgmiQJYtfc59wpV4R4joVJ5JyP5YSW6"; //place your change address here
   // await utils.sendTransaction(10000, contractAddress, changeAddress)
 
   // [PART 3]
   // Owner's Case
-  const contractAddress = '2MyiLtqM1eMKF1WXGngbBVKbd2YRnTQNZvf'; //place your contract address here
+  const contractAddress = '2NB7jUtcpwXPvm1QyPTCWGAz11dVBAiErNS'; //place your contract address here
   await checkOwnerCase(contractAddress);
 
   // Receiver's case

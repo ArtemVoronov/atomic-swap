@@ -4,6 +4,21 @@ const bcoin = require('bcoin').set('testnet');
 const bcrypto = require('bcrypto');
 const fs = require('fs');
 const network = bcoin.Network.get('testnet');
+const apiKey = process.env.BCOIN_API_KEY;
+
+const clientOptions = {
+  network: network.type,
+  port: network.rpcPort,
+  apiKey: apiKey
+}
+const walletOptions = {
+  network: network.type,
+  port: network.walletPort,
+  apiKey: apiKey
+}
+
+const nodeClient = new bcoin.NodeClient(clientOptions);
+const walletClient = new bcoin.WalletClient(walletOptions);
 
 const DATA_DIR_PATH = './data/';
 const BTC_DATA_DIR_PATH = DATA_DIR_PATH + 'btc/';
