@@ -2,7 +2,28 @@
 
 const bcoin = require('bcoin').set('testnet');
 const bcrypto = require('bcrypto');
+const fs = require('fs');
 const network = bcoin.Network.get('testnet');
+
+const DATA_DIR_PATH = './data/';
+const BTC_DATA_DIR_PATH = DATA_DIR_PATH + 'btc/';
+const BTC_CONTRACTS_DIR_PATH = BTC_DATA_DIR_PATH + 'contracts/';
+const BTC_TRANSACTIONS_DIR_PATH = BTC_DATA_DIR_PATH + 'transactions/';
+
+function createDataDirsIfNeeds() {
+  if (!fs.existsSync(DATA_DIR_PATH)) {
+    fs.mkdirSync(DATA_DIR_PATH);
+  }
+  if (!fs.existsSync(BTC_DATA_DIR_PATH)) {
+    fs.mkdirSync(BTC_DATA_DIR_PATH);
+  }
+  if (!fs.existsSync(BTC_CONTRACTS_DIR_PATH)) {
+    fs.mkdirSync(BTC_CONTRACTS_DIR_PATH);
+  }
+  if (!fs.existsSync(BTC_TRANSACTIONS_DIR_PATH)) {
+    fs.mkdirSync(BTC_TRANSACTIONS_DIR_PATH);
+  }
+}
 
 function recoverMasterFromMnemonic(mnemonicStr) {
   const mnemonic = new bcoin.hd.Mnemonic(mnemonicStr);
@@ -119,12 +140,103 @@ function getAddressFromRedeemScript(redeemScript) {
   return bcoin.Address.fromScripthash(redeemScript.hash160());
 }
 
+function verifyMTX(mtx) {
+  return mtx.verify(bcoin.Script.flags.STANDARD_VERIFY_FLAGS);
+}
+
+/**
+ * Utility: Search transaction for HTLC redemption and extract hashed secret
+ */
+function extractSecret(tx, address) {
+  if (typeof address !== 'string')
+    address = address.toString();
+
+  for (const input of tx.inputs) {
+    const inputJSON = input.getJSON();
+    const inAddr = inputJSON.address;
+    if (inAddr === address) {
+      return input.script.code[1].data;
+    }
+  }
+  return false;
+}
+
+function serializeContract(contractScript, contractAddress) {
+  createDataDirsIfNeeds();
+  let jsonString = contractScript.toJSON();
+  let contractBufferPath = BTC_CONTRACTS_DIR_PATH + "buffer" + contractAddress;
+  fs.writeFileSync(contractBufferPath, jsonString, {encoding: 'utf8'});
+  return contractBufferPath;
+}
+
+function deserializeContract(contractAddress) {
+  let contractBufferPath = BTC_CONTRACTS_DIR_PATH + "buffer" + contractAddress;
+  let jsonString = fs.readFileSync(contractBufferPath, {encoding: 'utf8'});
+  return bcoin.Script.fromJSON(jsonString);
+}
+
+async function sendTransaction(value, toAddress, changeAddress, accountName = 'default', rate = 1000) {
+  const walletId="primary"
+  const wallet = walletClient.wallet(walletId);
+
+  const options = {
+    rate: rate,
+    changeAddress: changeAddress, //optional
+    account: accountName,
+    outputs: [{ value: value, address: toAddress }]
+  };
+  const result = await wallet.send(options);
+  console.log(result);
+  return result;
+}
+
+/**
+ * (local testing only) Create a "coinbase" UTXO to spend from
+ */
+function getFundingTX(contractAddress, value) {
+  const cb = new bcoin.MTX();
+  cb.addInput({
+    prevout: new bcoin.Outpoint(),
+    script: new bcoin.Script(),
+    sequence: 0xffffffff
+  });
+  cb.addOutput({
+    address: contractAddress,
+    value: value
+  });
+
+  return cb;
+}
+
+/**
+ * Utility: Search transaction for address and get output index and value
+ */
+
+function extractOutput(tx, address) {
+  if (typeof address !== 'string')
+    address = address.toString();
+
+  for (let i = 0; i < tx.outputs.length; i++) {
+    const outputJSON = tx.outputs[i].getJSON();
+    const outAddr = outputJSON.address;
+    // const outAddr = tx.outputs[i].address;
+    // const outValue = tx.outputs[i].value;
+    // console.log(tx.outputs[i].path);
+    if (outAddr === address) {
+      return {
+        index: i,
+        amount: outputJSON.value
+      };
+    }
+  }
+  return false;
+}
+
 /**
  * Generate complete transaction to spend HTLC
  * Works for both swap and refund
  */
-
-function createRedeemTX(address, fee, fundingTX, fundingTXoutput, redeemScript, inputScript, locktime, privateKey) {
+function createRedeemTX(sendToAddress, fee, fundingTX, fundingTXoutput, redeemScript, inputScript, locktime, privateKey) {
   // Init and check input
   const redeemTX = new bcoin.MTX();
   privateKey = ensureBuffer(privateKey);
@@ -139,7 +251,7 @@ function createRedeemTX(address, fee, fundingTX, fundingTXoutput, redeemScript, 
   }
 
   redeemTX.addOutput({
-    address: address,
+    address: sendToAddress,
     value: coin.value - fee
   });
 
@@ -167,40 +279,25 @@ function signInput(mtx, index, redeemScript, value, privateKey, sigHashType, ver
   return mtx.signature(index, redeemScript, value, privateKey, sigHashType, version_or_flags);
 }
 
-
-function verifyMTX(mtx) {
-  return mtx.verify(bcoin.Script.flags.STANDARD_VERIFY_FLAGS);
-}
-
-/**
- * Utility: Search transaction for HTLC redemption and extract hashed secret
- */
-function extractSecret(tx, address) {
-  if (typeof address !== 'string')
-    address = address.toString();
-
-  for (const input of tx.inputs) {
-    const inputJSON = input.getJSON();
-    const inAddr = inputJSON.address;
-    if (inAddr === address) {
-      return input.script.code[1].data;
-    }
-  }
-  return false;
-}
-
 module.exports = {
+  BTC_CONTRACTS_DIR_PATH: BTC_CONTRACTS_DIR_PATH,
+  createDataDirsIfNeeds: createDataDirsIfNeeds,
   ensureBuffer: ensureBuffer,
+  recoverMasterFromMnemonic: recoverMasterFromMnemonic,
+  createWalletFromMnemonic: createWalletFromMnemonic,
   createSecret: createSecret,
   createRedeemScript: createRedeemScript,
   createRefundInputScript: createRefundInputScript,
   createSwapInputScript: createSwapInputScript,
-  recoverMasterFromMnemonic: recoverMasterFromMnemonic,
-  createWalletFromMnemonic: createWalletFromMnemonic,
   getKeyPair: getKeyPair,
   getAddressFromRedeemScript: getAddressFromRedeemScript,
-  extractSecret: extractSecret,
   verifyMTX: verifyMTX,
-  signInput: signInput,
+  extractSecret: extractSecret,
+  serializeContract: serializeContract,
+  deserializeContract: deserializeContract,
+  sendTransaction: sendTransaction,
+  getFundingTX: getFundingTX,
+  extractOutput: extractOutput,
   createRedeemTX: createRedeemTX,
+  signInput: signInput,
 }
