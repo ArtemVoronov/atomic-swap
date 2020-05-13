@@ -44,15 +44,17 @@ receiver.keyPair = utils.getKeyPair(receiverMasterKey.privateKey);
 // console.log("owner: %o", owner);
 // console.log("receiver: %o", receiver);
 
-async function checkOwnerCase(contractAddress) {
+async function checkOwnerCase(contractAddress, fundingTxHash) {
   const recoveredContractScript = utils.deserializeContract(contractAddress);
   const scriptForOwner = utils.createRefundInputScript(recoveredContractScript);
-  const fundingTX = utils.getFundingTX(contractAddress, 10000);
-  // console.log("fundingTX:", fundingTX);
+
+  const fundingTXJson = await nodeClient.getTX(fundingTxHash);
+  const fundingTX = bcoin.TX.fromJSON(fundingTXJson);
+  console.log("fundingTX:", fundingTX);
 
   // make sure we can determine which UTXO funds the HTLC
   const fundingTXoutput = utils.extractOutput(fundingTX, contractAddress);
-  // console.log('Funding TX output:\n', fundingTXoutput);
+  console.log('Funding TX output:\n', fundingTXoutput);
 
   const refundTX = utils.createRedeemTX(
       owner.keyPair.address,
@@ -64,32 +66,59 @@ async function checkOwnerCase(contractAddress) {
       TX_nSEQUENCE,
       owner.keyPair.privateKey
   );
+  console.log('refundTX: %o', refundTX);
+  // console.log('refundTX is MTX: %o', bcoin.MTX.isMTX(refundTX));
   let isValid = utils.verifyMTX(refundTX);
   console.log("isValid: %s", isValid);
-  console.log('refundTX: %o', refundTX);
   let rawTX = refundTX.toRaw().toString('hex');
   console.log('rawTX: %s', rawTX);
 
   if (isValid) {
     const result = await nodeClient.broadcast(rawTX);
-    console.log("broadcast: %o", result);
+    console.log("broadcasted: %o", result);
   }
-
-  // let rawTX = '02000000018ee57138fd7c7c20adc7e35a62d2ad7c265d1b38e42ed1c6511c990c40f6a40300000000bd47304402204d576f28ea8ce96930475b0605c106d8effed0a45c5b6dfb4d577d3cd10dd7b3022019a26c953134065e4321281a6a5e1640057bf119f788b146e8a8346e69b05e4d01004c7263a8202340b1af64ea7604ad1db689e623b51da5fda3e9e953c40183d58298ab9c214188210384759376831f2f669ac816286dc364fe4888911b2ff2d02d0a101154a9113f00ac6703000040b27521036c34f5820e8f8b1d192e20858516ae4871a24546f3578b72089271e82ee8c964ac68000040000100000000000000001976a914fbc309e205dd0cab68970636b97b1b72fe14693288ac00000000';
-  // const result = await nodeClient.broadcast(rawTX);//TODO: solve problem with stucked tx
-  // console.log("broadcast: %o", result);
 }
 
-async function checkReceiverCase(contractAddress) {
-  // const scriptForReceiver = utils.createSwapInputScript(redeemScript, secret.secret);
-  // TODO ...
+async function checkReceiverCase(contractAddress, fundingTxHash, secret) {
+  const recoveredContractScript = utils.deserializeContract(contractAddress);
+  const scriptForReceiver = utils.createSwapInputScript(recoveredContractScript, secret);
+
+  const fundingTXJson = await nodeClient.getTX(fundingTxHash);
+  const fundingTX = bcoin.TX.fromJSON(fundingTXJson);
+  console.log("fundingTX:", fundingTX);
+
+  // make sure we can determine which UTXO funds the HTLC
+  const fundingTXoutput = utils.extractOutput(fundingTX, contractAddress);
+  console.log('Funding TX output:\n', fundingTXoutput);
+
+  const swapTX = utils.createRedeemTX(
+      receiver.keyPair.address,
+      10000,
+      fundingTX,
+      fundingTXoutput.index,
+      recoveredContractScript,
+      scriptForReceiver,
+      null,
+      receiver.keyPair.privateKey
+  );
+  console.log('swapTX:\n', swapTX);
+  let isValid = utils.verifyMTX(swapTX);
+  console.log("isValid: %s", isValid);
+  let rawTX = swapTX.toRaw().toString('hex');
+  console.log('rawTX: %s', rawTX);
+
+
+  if (isValid) {
+    const result = await nodeClient.broadcast(rawTX);
+    console.log("broadcasted: %o", result);
+  }
 }
 
 (async () => {
   // [PART 1] Generate contract and serialize it, we need to fund it before using
-  // const secret = utils.createSecret();
-  // // console.log("secret:     ", secret.secret);
-  // // console.log("secret hash:", secret.hash);//
+  // const secret = utils.createSecret('aaaaffffaaaaffffaaaaffffaaaaffff');
+  // console.log("secret:     ", secret.secret);
+  // console.log("secret hash:", secret.hash);//
   // const contractScript = utils.createRedeemScript(secret.hash, owner.keyPair.publicKey, receiver.keyPair.publicKey, CSV_LOCKTIME);
   // const contractAddress = utils.getAddressFromRedeemScript(contractScript);
   // console.log('contractAddress:', contractAddress.toString());
@@ -97,15 +126,19 @@ async function checkReceiverCase(contractAddress) {
 
   // [PART 2] Use dispenser for funding: https://tbtc.bitaps.com/ or send from your wallet if you have funds
   // Fund contract, comment part 1, part 2, and uncomment part 3
-  // const contractAddress = '2NB7jUtcpwXPvm1QyPTCWGAz11dVBAiErNS'; //place your contract address here
-  // let changeAddress = "n3jBgmiQJYtfc59wpV4R4joVJ5JyP5YSW6"; //place your change address here
+  // const contractAddress = '2MuDQ7YF2TRCr1WNNF9sbMyUd1goSit5Fog'; //place your contract address here
+  // let changeAddress = "myz1QGZmbYpPLnYcZzsxGjpFB3FkZwumZT"; //place your change address here
   // await utils.sendTransaction(10000, contractAddress, changeAddress)
 
   // [PART 3]
   // Owner's Case
-  const contractAddress = '2NB7jUtcpwXPvm1QyPTCWGAz11dVBAiErNS'; //place your contract address here
-  await checkOwnerCase(contractAddress);
+  // const contractAddress = '2NB7jUtcpwXPvm1QyPTCWGAz11dVBAiErNS'; //place your contract address here
+  // const fundingTxHash = '956248b787f0b576055d5b322b23b1aba583f9bd6e1fbeab7c241e1399305dd3'; //place the transactions that funds the contract address
+  // await checkOwnerCase(contractAddress, fundingTxHash);
 
   // Receiver's case
-  // checkReceiverCase(contractAddress);
+  const secret = 'aaaaffffaaaaffffaaaaffffaaaaffff';
+  const contractAddress = '2MuDQ7YF2TRCr1WNNF9sbMyUd1goSit5Fog'; //place your contract address here
+  const fundingTxHash = '05c132208796c4ce454abe7c1761ec1ad36af275fdcc95b0afd32e4b063350a0'; //place the transactions that funds the contract address
+  await checkReceiverCase(contractAddress, fundingTxHash, secret);
 })();

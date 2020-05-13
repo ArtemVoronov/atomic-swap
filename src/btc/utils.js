@@ -234,9 +234,6 @@ function extractOutput(tx, address) {
   for (let i = 0; i < tx.outputs.length; i++) {
     const outputJSON = tx.outputs[i].getJSON();
     const outAddr = outputJSON.address;
-    // const outAddr = tx.outputs[i].address;
-    // const outValue = tx.outputs[i].value;
-    // console.log(tx.outputs[i].path);
     if (outAddr === address) {
       return {
         index: i,
@@ -251,13 +248,14 @@ function extractOutput(tx, address) {
  * Generate complete transaction to spend HTLC
  * Works for both swap and refund
  */
-function createRedeemTX(sendToAddress, fee, fundingTX, fundingTXoutput, redeemScript, inputScript, locktime, privateKey) {
+function createRedeemTX(sendToAddress, fee, fundingTX, fundingTXoutput, redeemScript,
+                        inputScript, locktime, privateKey) {
   // Init and check input
   const redeemTX = new bcoin.MTX();
   privateKey = ensureBuffer(privateKey);
 
   // Add coin (input UTXO to spend) from HTLC transaction output
-  const coin = bcoin.Coin.fromTX(fundingTX, 0, -1);
+  const coin = bcoin.Coin.fromTX(fundingTX, fundingTXoutput, -1);
   redeemTX.addCoin(coin);
 
   // Add output to mtx and subtract fee
